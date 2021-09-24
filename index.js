@@ -220,15 +220,18 @@ function retrieveFecha(doctor, fecha) {
   return doctor.fechasDisponibles.filter((fe) => fe.fecha == fecha)[0];
 }
 
-function checkDoctorAvailability(fecha, especialidad) {
-  return doctores.filter((doctor) => { // considerar disponibilidad horaria (booleano)
-    if (
-      doctor.especialidad == especialidad &&
-      doctor.fechasDisponibles.find((fd) => fd.fecha == fecha)
-    ) {
-      return doctor;
-    }
+async function checkDoctorAvailability(fecha, especialidad, doctorPos) {
+  let index = doctorPos !== undefined ? doctorPos : 0;
+  const response = await axios.post(`http://23.23.15.212/doctor-fechas/buscar?index=${index}`, {
+    "especialidad": especialidad,
+    "fecha": fecha
   });
+
+  const doctor = response.data.result;
+
+  console.log("DOCTOR ENCONTRADO", doctor);
+
+  return doctor;
 }
 
 function buildValidationResult(isValid, violatedSlot, messageContent) {
@@ -252,11 +255,12 @@ function buildValidationResult(isValid, violatedSlot, messageContent) {
 async function validateFechaEspecialidad(fecha, especialidad) {
   console.log("Especialidad val", especialidad);
 
-  const { data} = axios.get('http://23.23.15.212/especialidades');
+  const response = await axios.get('http://23.23.15.212/especialidades');
 
-  console.log(data);
+  const especialidades = response.data.result;
 
-  if (especialidad && !especialidades.find((dt) => dt == especialidad)) {
+
+  if (especialidad && !especialidades.find((dt) => dt.nombre == especialidad)) {
     console.log("ERROR especialidad NOT FOUND");
     return buildValidationResult(
       false,
@@ -265,14 +269,14 @@ async function validateFechaEspecialidad(fecha, especialidad) {
     );
   }
 
-  if (fecha && !dates.find((dt) => dt == fecha)) {
-    console.log("ERROR fecha NOT FOUND");
-    return buildValidationResult(
-      false,
-      "Fecha",
-      "No se ha encontrado una fecha disponible para la especialidad ingresada. Por favor, especifique otra fecha"
-    );
-  }
+  // if (fecha && !dates.find((dt) => dt == fecha)) {
+  //   console.log("ERROR fecha NOT FOUND");
+  //   return buildValidationResult(
+  //     false,
+  //     "Fecha",
+  //     "No se ha encontrado una fecha disponible para la especialidad ingresada. Por favor, especifique otra fecha"
+  //   );
+  // }
 
   return buildValidationResult(true, null, null);
 }
@@ -349,7 +353,7 @@ function retrieveSelectSchedule(intentRequest, fecha, index, sessionAttributes, 
   }
 }
 
-function retrieveDoctorSchedule(
+async function retrieveDoctorSchedule(
   intentRequest,
   fecha,
   especialidad,
@@ -358,15 +362,15 @@ function retrieveDoctorSchedule(
   callback
 ) {
   // buscamos disponibilidad de doctor
-  const doctorsAvailable = checkDoctorAvailability(fecha, especialidad);
+  const doctorsAvailable = await checkDoctorAvailability(fecha, especialidad, sessionAttributes["doctorPos"]);
 
   console.log("DOCS AVAILABLE", doctorsAvailable);
   console.log("DOCS POS", sessionAttributes["doctorPos"]);
 
   if (
-    doctorsAvailable.length == 0 ||
+    doctorsAvailable.count == 0 ||
     (sessionAttributes["doctorPos"] !== undefined &&
-      sessionAttributes["doctorPos"] == doctorsAvailable.length)
+      sessionAttributes["doctorPos"] == doctorsAvailable.count)
   ) {
     const messageContent = `No se ha encontrado un doctor disponible para el ${fecha}. 
     Por favor, especifique otra fecha`;
@@ -395,7 +399,7 @@ function retrieveDoctorSchedule(
         ? sessionAttributes["doctorPos"]
         : 0;
     const messageContent = `El doctor ${
-      doctorsAvailable[index].nombres + doctorsAvailable[index].apellidos
+      doctorsAvailable.doctor
     } 
         está disponible para atenderlo el dia ${fecha}.\nDesea conocer su horario de atención?`;
 
@@ -428,7 +432,7 @@ function retrieveDoctorSchedule(
   }
 }
 
-function dispatch(intentRequest, callback) {
+async function dispatch(intentRequest, callback) {
   console.log(JSON.stringify(intentRequest));
 
   let sessionAttributes = getSessionAttributes(intentRequest);
@@ -472,7 +476,7 @@ function dispatch(intentRequest, callback) {
   }
 
   if (source == "DialogCodeHook") {
-    const validationResult = validateFechaEspecialidad(fecha, especialidad);
+    const validationResult = await validateFechaEspecialidad(fecha, especialidad);
 
     console.log("VALIDATION RESULT", validationResult);
     console.log("SESSION ATTRIBUTES", sessionAttributes);
@@ -495,7 +499,7 @@ function dispatch(intentRequest, callback) {
       // recién ha comenzado la interacción, el usuario no ha ingresado nada. Dejar al bot elicitar slots
       return callback(delegate(sessionAttributes, slots, null));
     } else if (fecha && especialidad && !conocerHorario) {
-      return retrieveDoctorSchedule(
+      return await retrieveDoctorSchedule(
         intentRequest,
         fecha,
         especialidad,
@@ -527,7 +531,7 @@ function dispatch(intentRequest, callback) {
       } else {
         console.log("DIJO NO");
         // Vamos por el siguiente doctor
-        return retrieveDoctorSchedule(
+        return await retrieveDoctorSchedule(
           intentRequest,
           fecha,
           especialidad,
@@ -613,9 +617,9 @@ function dispatch(intentRequest, callback) {
   }
 }
 
-exports.handler = (event, context, callback) => {
+exports.handler = async (event, context, callback) => {
   try {
-    dispatch(event, (response) => {
+    await dispatch(event, (response) => {
       callback(null, response);
     });
   } catch (err) {
