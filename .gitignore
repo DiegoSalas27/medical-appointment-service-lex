@@ -1,0 +1,21 @@
+# package directories
+.idea
+node_modules
+jspm_packages
+package-lock.json
+.vscode
+
+# Serverless directories
+.serverless
+
+# Webpack directories
+.webpack
+
+# TypeScript
+.build
+
+# Serverless dotenv plugin
+.env.*
+
+cert
+key

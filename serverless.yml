@@ -1,0 +1,29 @@
+service:
+  name: medical-appointment-service
+
+plugins:
+  - serverless-plugin-typescript
+
+provider: 
+  name: aws
+  runtime: nodejs12.x
+  memorySize: 1024
+  stage: ${opt:stage, 'dev'}
+  regions: us-east-1
+
+# functions with events are to be called by the frontend; funtions without events are to be called by the bot
+functions: 
+  # frontend lambdas
+  listar-citas-medicas:
+    name: medical-appointment-listar-citas-medicas-${self:provider.stage}
+    handler: src/handlers/frontend/medicalAppointment/index.handler
+    events:
+      - http:
+          path: /medical-appointment/{patientId} # gets medical appointments from an specific patient
+          method: GET
+          cors: true
+  
+  # bot lambdas
+  registrar-citas-medicas: 
+    name: medical-appointment-registrar-citas-medicas-${self:provider.stage}
+    handler: src/handlers/lex/registerMedicalAppointment.handler 
